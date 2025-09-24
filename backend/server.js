@@ -2,11 +2,13 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+const authRoutes = require('./routes/auth');
+require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
 
-// Configure CORS for Socket.io
+// Configure CORS for both Express and Socket.io
 const io = socketIo(server, {
   cors: {
     origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
@@ -15,8 +17,15 @@ const io = socketIo(server, {
   }
 });
 
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+  credentials: true
+}));
 app.use(express.json());
+
+// Routes
+app.use('/api/auth', authRoutes);
 
 // Store whiteboard state
 let whiteboardState = {
@@ -28,6 +37,7 @@ let whiteboardState = {
 // Store connected users
 const connectedUsers = new Map();
 
+// Socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
   
@@ -134,14 +144,62 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-// Health check endpoint
+// Basic health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', users: connectedUsers.size });
+  res.json({ 
+    status: 'Server is running',
+    timestamp: new Date().toISOString(),
+    connectedUsers: connectedUsers.size
+  });
+});
+
+// Root endpoint with API documentation
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Whiteboard API Server',
+    endpoints: {
+      health: 'GET /health',
+      authHealth: 'GET /api/auth/health',
+      signup: 'POST /api/auth/signup',
+      login: 'POST /api/auth/login',
+      users: 'GET /api/auth/users (testing)'
+    },
+    exampleRequests: {
+      signup: {
+        method: 'POST',
+        url: '/api/auth/signup',
+        body: {
+          username: 'newuser',
+          email: 'newuser@example.com',
+          password: 'password123'
+        }
+      },
+      login: {
+        method: 'POST',
+        url: '/api/auth/login',
+        body: {
+          email: 'user1@gmail.com',
+          password: 'password1'
+        }
+      }
+    },
+    socketEvents: {
+      'shape-update': 'Update whiteboard shapes',
+      'drawing-state': 'Real-time drawing feedback',
+      'cursor-move': 'Cursor movement tracking',
+      'tool-change': 'Tool selection change',
+      'history-update': 'Undo/redo operations'
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`📝 Signup: POST http://localhost:${PORT}/api/auth/signup`);
+  console.log(`🔐 Login: POST http://localhost:${PORT}/api/auth/login`);
+  console.log(`⚡ Socket.io ready for real-time whiteboard collaboration`);
 });
 
 module.exports = { app, server, io };
